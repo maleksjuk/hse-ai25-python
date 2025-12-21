@@ -86,7 +86,6 @@ def main():
                 if weather_data['success']:
                     current_temperature = weather_data['data']['main']['temp']
                     st.title(f'{current_temperature}°C', text_alignment='center')
-                    
                     is_regular_temp = tr.is_regular_temperature(current_temperature, today_season(), city_data)
                     regular_label = "нормальная" if is_regular_temp else "аномальная"
                     color = 'darkgreen' if is_regular_temp else 'red'
@@ -98,15 +97,11 @@ def main():
                 st.badge('Введите ключ API OpenWeatherMap', color='yellow')
 
     with column2:
-
         if selected_city:
             st.subheader('Статистика по историческим данным для города')
-
             st.table(tr.get_season_stats_for_show(season_stats))
-
             fig = tr.get_figure_for_city(selected_city, city_data, anomaly_city_data)
             st.plotly_chart(fig, use_container_width=True)
-
 
 
 if __name__ == "__main__":
