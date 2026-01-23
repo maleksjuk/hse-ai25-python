@@ -1,4 +1,5 @@
 import aiohttp
+from random import randint
 
 async def get_product_calories(product_name: str):
     url = f"https://world.openfoodfacts.org/cgi/search.pl?action=process&search_terms={product_name}&json=true"
@@ -30,4 +31,8 @@ async def get_temperature(city: str, api_key: str):
 
 
 async def get_workout_calories(workout: str):
-    return 300
+    """
+    Я не смог быстро найти API для определения данных по тренировке. Поэтому будет рандом
+    """
+    burned_calories = len(workout) * randint(100, 1000) % 1500
+    return burned_calories

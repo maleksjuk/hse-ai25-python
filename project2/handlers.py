@@ -6,6 +6,7 @@ import states
 from logger import LoggingMiddleware
 import utils
 from config import WHEATHER_API_KEY
+from datetime import datetime
 
 router = Router()
 router.message.middleware(LoggingMiddleware())
@@ -27,7 +28,8 @@ async def update_user(id):
             "logged_calories": 0,
             "burned_calories": 0,
 
-            "wait_calories": 0
+            "wait_calories": 0,
+            "last_update": datetime.today()
         }
 
 
@@ -36,6 +38,7 @@ async def cmd_start(message: Message):
     await message.answer("Привет! Это проект 2 по курсу \"Прикладной Python\" студента @maleksjuk")
     user_id = message.from_user.id
     await update_user(user_id)
+    await update_date(user_id)
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
@@ -57,7 +60,9 @@ async def cmd_help(message: Message):
 
 @router.message(Command("set_profile"))
 async def cmd_set_profile(message: Message, state: FSMContext):
-    await update_user(message.from_user.id)
+    user_id = message.from_user.id
+    await update_user(user_id)
+    await update_date(user_id)
     await message.answer("Настроим ваш профиль.\nВведите ваш вес (в кг)")
     await state.set_state(states.Profile.weight)
 
@@ -134,12 +139,23 @@ async def update_goals(user_id):
 
     users[user_id]["calorie_goal"] = 10 * weight + 6.25 * height - 5 * age + 300
 
+
+async def update_date(user_id):
+    user = users[user_id]
+    if user["last_update"] != datetime.today():
+        user["last_update"] = datetime.today()
+        user["logged_water"] = 0
+        user["logged_calories"] = 0
+        user["burned_calories"] = 0
+
+
 async def city_temperature(city: str):
     temp = await utils.get_temperature(city, WHEATHER_API_KEY)
     # print(temp['data']['main']['temp'])
     if not temp:
         return 0
     return temp['main']['temp']
+
 
 @router.message(Command("user_info"))
 async def get_user_info(message: Message):
@@ -157,6 +173,7 @@ async def get_user_info(message: Message):
 @router.message(Command("log_water"))
 async def cmd_log_water(message: Message) -> None:
     user_id = message.from_user.id
+    await update_date(user_id)
     args = message.text.strip().split()
     if len(args) != 2:
         await message.answer("Введите количество выпитой воды в формате \"/log_water <количество>\"")
@@ -175,6 +192,7 @@ async def cmd_log_water(message: Message) -> None:
 @router.message(Command("log_food"))
 async def cmd_log_food(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    await update_date(user_id)
     args = message.text.strip().split()
     if len(args) == 1:
         await message.answer("Введите название продукта в формате \"/log_food <название продукта>\"")
@@ -187,7 +205,7 @@ async def cmd_log_food(message: Message, state: FSMContext):
     if data:
         food_name = data["name"]
         calories = data["calories"]
-    users[user_id]["wait_calories"] = calories // 100
+    users[user_id]["wait_calories"] = calories / 100
     await message.answer(f"{food_name.capitalize()} - {calories} ккал на 100 г. Сколько грамм вы съели?")
     await state.set_state(states.Calories.count)
 
@@ -210,6 +228,7 @@ async def cmd_log_food_count(message: Message, state: FSMContext):
 @router.message(Command("log_workout"))
 async def cmd_log_workout(message: Message):
     user_id = message.from_user.id
+    await update_date(user_id)
     args = message.text.strip().split()
     if len(args) < 3:
         await message.answer("Введите данные о тренировке в формате \"/log_workout <тип тренировки> <время в минутах>\"")
@@ -221,24 +240,29 @@ async def cmd_log_workout(message: Message):
             await message.answer("Ошибка чтения времени тренировки")
             return
         
-        #data API
-        burn_calories = 0
+        burn_calories = await utils.get_workout_calories(workout_data)
+        extra_water = workout_time // 30 * 200
 
         users[user_id]["burned_calories"] += burn_calories
+        users[user_id]["water_goal"] += extra_water
+
         await message.answer(f"Тренировка \"{workout_data}\" в течение {workout_time} мин. Потрачено калорий: {burn_calories} ккал.\n"
-                             f"Дополнительно выпейте {workout_time // 30} мл воды.")
+                             f"Дополнительно выпейте {extra_water} мл воды.")
 
 
 @router.message(Command("check_progress"))
 async def cmd_check_progress(message: Message):
     user_id = message.from_user.id
-    water_target = users[user_id]["water_goal"]
-    water_logged = users[user_id]["logged_water"]
-    calories_target = users[user_id]["calorie_goal"]
-    calories_logged = users[user_id]["logged_calories"]
-    calories_burned = users[user_id]["burned_calories"]
+    await update_date(user_id)
+    user = users[user_id]
 
-    text = "Прогресс:\n"
+    water_target = user["water_goal"]
+    water_logged = user["logged_water"]
+    calories_target = user["calorie_goal"]
+    calories_logged = user["logged_calories"]
+    calories_burned = user["burned_calories"]
+
+    text = f"Прогресс ({user["last_update"].strftime("%d.%m.%Y")}):\n"
     text += "Вода:\n"
     text += f"- цель: {water_target} мл\n"
     text += f"- выпито: {water_logged} мл\n"
