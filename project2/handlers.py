@@ -8,6 +8,11 @@ import utils
 from config import WHEATHER_API_KEY
 from datetime import datetime
 
+DATEFORMAT = "%d.%m.%Y"
+
+def get_date_string(date: datetime):
+    return date.strftime(DATEFORMAT)
+
 router = Router()
 router.message.middleware(LoggingMiddleware())
 # router.callback_query.middleware(LoggingMiddleware())
@@ -142,7 +147,7 @@ async def update_goals(user_id):
 
 async def update_date(user_id):
     user = users[user_id]
-    if user["last_update"] != datetime.today():
+    if get_date_string(user["last_update"]) != get_date_string(datetime.today()):
         user["last_update"] = datetime.today()
         user["logged_water"] = 0
         user["logged_calories"] = 0
@@ -262,7 +267,7 @@ async def cmd_check_progress(message: Message):
     calories_logged = user["logged_calories"]
     calories_burned = user["burned_calories"]
 
-    text = f"Прогресс ({user["last_update"].strftime("%d.%m.%Y")}):\n"
+    text = f"Прогресс ({get_date_string(user["last_update"])}):\n"
     text += "Вода:\n"
     text += f"- цель: {water_target} мл\n"
     text += f"- выпито: {water_logged} мл\n"
