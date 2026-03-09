@@ -4,7 +4,7 @@ from datetime import datetime
 
 class SuccessResponse(BaseModel):
     success: bool = True
-    data: list | dict
+    data: list | dict | None = None
 
 
 class LinkCreationRequest(BaseModel):

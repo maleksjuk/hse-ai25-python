@@ -17,16 +17,16 @@ async def cleanup_unused_links():
                 await asyncio.sleep(60)
             else:
                 await asyncio.sleep(1 * 60 * 60)
-            core.cleanup_unused_links(Depends(get_session))
+            await core.cleanup_unused_links(Depends(get_session))
         except asyncio.CancelledError:
             break
 
 
 @router.get("/deleted", response_model=DeletedShortCodesResponse)
-def get_deleted_short_codes(
-    db: Session = Depends(get_session)
+async def get_deleted_short_codes(
+    db: DB_TYPE = Depends(get_async_session)
 ):
-    deleted = core.get_deleted_short_codes(db)
+    deleted = await core.get_deleted_short_codes(db)
     deleted_list = []
     for link in deleted:
         deleted_list.append({
