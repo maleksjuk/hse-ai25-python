@@ -28,4 +28,4 @@ class ShortCodeStatsResponse(BaseModel):
 
 
 class DeletedShortCodesResponse(BaseModel):
-    deleted: dict
+    deleted: list

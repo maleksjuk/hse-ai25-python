@@ -1,12 +1,15 @@
 import string
 import random
-from datetime import datetime
 import logging
 import json
 from datetime import datetime, timedelta
-from db.database import DB_TYPE
+from db import links
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+DB_TYPE = Session
 
 ON_TEST_AUTODELETE = True
 MAX_DAYS_AFTER_USING = 5
@@ -17,73 +20,61 @@ def generate_short_code(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
-def short_code_enabled(db: DB_TYPE, short_code: str):
-    if short_code not in db:
-        return False
-    return not db[short_code].get('is_deleted', False)
+def short_code_exists(db: DB_TYPE, short_code: str):
+    link = links.get_active_link_by_code(db, short_code)
+    return link is not None
 
 
-def add_new_link_to_db(db: DB_TYPE, original_url: str, short_code: str, expires_at: datetime | None = None):
-    if short_code_enabled(db, short_code):
+def add_new_link_to_db(db: DB_TYPE, original_url: str, short_code: str,
+                       expires_at: datetime | None = None):
+    if short_code_exists(db, short_code):
         return None
-    db[short_code] = {
-        'original_url': original_url,
-        'creation_date': datetime.now(),
-        'click_count': 0,
-        'last_using': None,
-        'expires_at': expires_at,
-        'is_deleted': False
-    }
-    return db[short_code]
+    return links.create_link(db, short_code, original_url, expires_at)
 
 def get_original_url_from_db(db: DB_TYPE, short_code: str):
-    if not short_code_enabled(db, short_code):
+    link = links.get_active_link_by_code(db, short_code)
+    if link is None:
         return None
-    data = db[short_code]
-    data['click_count'] += 1
-    data['last_using'] = datetime.now()
-    return data['original_url']
+    links.increment_click_count(db, link)
+    return link.original_url
 
 def delete_short_code_from_db(db: DB_TYPE, short_code: str):
-    # db.pop(short_code, None)
-    if short_code_enabled(db, short_code):
-        db[short_code]['is_deleted'] = True
+    link = links.get_active_link_by_code(db, short_code)
+    if link is not None:
+        links.delete_link(db, link)
 
 def update_url_in_db(db: DB_TYPE, short_code: str, original_url: str):
-    if short_code not in db:
+    link = links.get_active_link_by_code(db, short_code)
+    if link is None:
         return
-    delete_short_code_from_db(db, short_code)
-    return add_new_link_to_db(db, original_url, short_code)
+    links.delete_link(db, link)
+    return add_new_link_to_db(db, original_url, short_code, link.expires_at)
 
 def get_stats_from_db(db: DB_TYPE, short_code: str):
-    return db.get(short_code, None)
+    link = links.get_active_link_by_code(db, short_code)
+    if link is None:
+        return None
+    return {
+        'short_code': link.short_code,
+        'original_url': link.original_url,
+        'creation_date': link.creation_date,
+        'click_count': link.click_count,
+        'last_using': link.last_using,
+        'expires_at': link.expires_at
+    }
 
 def search_short_code_by_original_url(db: DB_TYPE, original_url: str):
-    short_code = None
-    for code, stats in db.items():
-        if stats['original_url'] == original_url:
-            short_code = code
-            break
-    return short_code
+    return links.search_by_original_url(db, original_url)
 
 def cleanup_unused_links(db: DB_TYPE):
     if ON_TEST_AUTODELETE:
         border_date = datetime.now() - timedelta(minutes=MAX_MINUTES_AFTER_USING)
     else:
         border_date = datetime.now() - timedelta(days=MAX_DAYS_AFTER_USING)
-    for code, stats in db.items():
-        if stats.get('is_deleted', False):
-            continue
-        last_using = stats['last_using']
-        if last_using is None:
-            last_using = stats['creation_date']
-        if last_using < border_date:
-            delete_short_code_from_db(db, code)
-            logger.info(f"Remove unused link: {code}")
-        
+    
+    unused_links = links.get_unused_links(db, border_date)
+    for link in unused_links:
+        links.delete_link(db, link)
+    
 def get_deleted_short_codes(db: DB_TYPE):
-    deleted = {}
-    for code, stats in db.items():
-        if stats.get('is_deleted', False):
-            deleted[code] = stats
-    return deleted
+    return links.get_deleted_links(db)
