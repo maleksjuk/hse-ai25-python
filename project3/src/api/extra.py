@@ -17,7 +17,7 @@ async def cleanup_unused_links():
                 await asyncio.sleep(60)
             else:
                 await asyncio.sleep(1 * 60 * 60)
-            await core.cleanup_unused_links(Depends(get_session))
+            await core.cleanup_unused_links(Depends(get_async_session))
         except asyncio.CancelledError:
             break
 
